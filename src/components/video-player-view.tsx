@@ -93,7 +93,12 @@ export default function VideoPlayerView({
     const handleLoadedMetadata = () => {
       setDuration(video.duration || 0)
       onDurationChange(video.duration || 0)
-      setupAudioProcessing(video)
+      try {
+        setupAudioProcessing(video)
+        console.log("setupAudioProcessing called for video")
+      } catch (e) {
+        console.error("setupAudioProcessing error (video)", e)
+      }
     }
 
     const handleTimeUpdate = () => {
@@ -126,7 +131,7 @@ export default function VideoPlayerView({
       video.removeEventListener('play', handlePlay)
       video.removeEventListener('pause', handlePause)
     }
-  }, [item.url, onEnded, setupAudioProcessing, volume, onDurationChange, item])
+  }, [item.url, onEnded, setupAudioProcessing, volume, onDurationChange])
 
   useEffect(() => {
     if (videoRef.current) {
