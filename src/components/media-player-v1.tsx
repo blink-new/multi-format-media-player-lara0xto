@@ -194,27 +194,6 @@ export default function MediaPlayerV1() {
     setPlaylist((prev) => prev.map((track) => (track.id === id ? { ...track, duration } : track)))
   }
 
-  useEffect(() => {
-    const audioCtx = audioContextRef.current;
-    if (audioCtx && audioCtx.state === 'suspended') {
-      const resumeContext = () => {
-        audioCtx.resume().then(() => {
-          console.log('AudioContext resumed successfully');
-        });
-        document.removeEventListener('click', resumeContext);
-        document.removeEventListener('keydown', resumeContext);
-      };
-
-      document.addEventListener('click', resumeContext);
-      document.addEventListener('keydown', resumeContext);
-
-      return () => {
-        document.removeEventListener('click', resumeContext);
-        document.removeEventListener('keydown', resumeContext);
-      };
-    }
-  }, [currentTrackIndex]);
-
   return (
     <div className="w-full max-w-6xl mx-auto flex flex-col lg:flex-row gap-6 p-4">
       <Card className="lg:w-1/3 bg-slate-800/90 border-slate-700 shadow-2xl backdrop-blur-sm">

@@ -115,12 +115,6 @@ export default function AudioPlayerView({
     // Set initial volume
     audio.volume = volume
 
-    // Attempt to play when the item changes
-    audio.play().catch(error => {
-      console.error("Error attempting to play audio:", error);
-      // Handle autoplay policy here if needed, e.g., show a play button
-    });
-
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
       audio.removeEventListener('timeupdate', handleTimeUpdate)

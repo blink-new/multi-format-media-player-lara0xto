@@ -115,10 +115,6 @@ export default function VideoPlayerView({
     video.addEventListener('pause', handlePause)
 
     // Attempt to play when the item changes
-    video.play().catch(error => {
-      console.error("Error attempting to play video:", error);
-      // Handle autoplay policy here if needed, e.g., show a play button
-    });
 
     // Set initial volume
     video.volume = volume
