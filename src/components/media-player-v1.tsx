@@ -41,43 +41,49 @@ export default function MediaPlayerV1() {
   }, [])
 
   useEffect(() => {
-    // Initialize AudioContext - This should run only once on mount
+    // Initialize AudioContext and MasterGainNode only once
     if (!audioContextRef.current) {
-      console.log("MediaPlayerV1: Initializing AudioContext and MasterGainNode")
-      audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+      try {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        console.log("AudioContext initialized");
+      } catch (e) {
+        console.error("Failed to initialize AudioContext", e);
+      }
     }
-    // Initialize MasterGainNode only after AudioContext is available
     if (audioContextRef.current && !masterGainNodeRef.current) {
-      masterGainNodeRef.current = audioContextRef.current.createGain()
-      masterGainNodeRef.current.connect(audioContextRef.current.destination)
+      try {
+        masterGainNodeRef.current = audioContextRef.current.createGain();
+        masterGainNodeRef.current.connect(audioContextRef.current.destination);
+        console.log("MasterGainNode initialized and connected");
+      } catch (e) {
+        console.error("Failed to initialize MasterGainNode", e);
+      }
     }
 
-    // This cleanup is for when MediaPlayerV1 itself unmounts
+    // Cleanup on unmount
     return () => {
-      console.log("MediaPlayerV1: Unmounting - cleaning up main audio nodes and context")
-      // The cleanupAudioNodes here is for the currently playing track's source, if any.
-      // It's good practice to call it, though setupAudioProcessing should handle it between tracks.
-      cleanupAudioNodes()
-
+      cleanupAudioNodes();
       if (masterGainNodeRef.current) {
-        masterGainNodeRef.current.disconnect()
-        masterGainNodeRef.current = null
+        try {
+          masterGainNodeRef.current.disconnect();
+        } catch (e) {
+          console.warn("Error disconnecting masterGainNode", e);
+        }
+        masterGainNodeRef.current = null;
       }
       if (audioContextRef.current && audioContextRef.current.state !== "closed") {
         audioContextRef.current.close().then(() => {
-          console.log("MediaPlayerV1: AudioContext closed")
-          audioContextRef.current = null
-        })
+          console.log("AudioContext closed");
+          audioContextRef.current = null;
+        });
       }
-      // Revoke object URLs when the main player is removed
       playlist.forEach((item) => {
-        // Check if URL is still valid before revoking, though it's generally safe
         if (item.url.startsWith("blob:")) {
-          URL.revokeObjectURL(item.url)
+          URL.revokeObjectURL(item.url);
         }
-      })
-    }
-  }, [cleanupAudioNodes, playlist])
+      });
+    };
+  }, [cleanupAudioNodes, playlist]);
 
   const setupAudioProcessing = useCallback(
     (mediaElement: HTMLMediaElement) => {
