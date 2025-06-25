@@ -30,6 +30,7 @@ export default function VideoPlayerView({
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [isMuted, setIsMuted] = useState(false)
+  const [playbackError, setPlaybackError] = useState<string | null>(null)
 
   const togglePlay = useCallback(() => {
     if (!videoRef.current) return
@@ -87,6 +88,7 @@ export default function VideoPlayerView({
   }
 
   useEffect(() => {
+    setPlaybackError(null) // Reset error on new video
     const video = videoRef.current
     if (!video) return
 
@@ -113,13 +115,21 @@ export default function VideoPlayerView({
     const handlePlay = () => setIsPlaying(true)
     const handlePause = () => setIsPlaying(false)
 
+    const handleError = () => {
+      const ext = item.name.split('.').pop()?.toLowerCase()
+      if (ext === 'mkv') {
+        setPlaybackError('Your browser does not support MKV video playback. Try Chrome or Edge, or use MP4/WebM for best compatibility.')
+      } else {
+        setPlaybackError('Video playback failed. This format may not be supported by your browser.')
+      }
+    }
+
     video.addEventListener('loadedmetadata', handleLoadedMetadata)
     video.addEventListener('timeupdate', handleTimeUpdate)
     video.addEventListener('ended', handleEnded)
     video.addEventListener('play', handlePlay)
     video.addEventListener('pause', handlePause)
-
-    // Attempt to play when the item changes
+    video.addEventListener('error', handleError)
 
     // Set initial volume
     video.volume = volume
@@ -130,6 +140,7 @@ export default function VideoPlayerView({
       video.removeEventListener('ended', handleEnded)
       video.removeEventListener('play', handlePlay)
       video.removeEventListener('pause', handlePause)
+      video.removeEventListener('error', handleError)
     }
   }, [item.url, onEnded, setupAudioProcessing, volume, onDurationChange])
 
@@ -161,25 +172,34 @@ export default function VideoPlayerView({
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 bg-black rounded-lg overflow-hidden mb-4 relative group">
-        <video
-          ref={videoRef}
-          src={item.url}
-          className="w-full h-full object-contain"
-          style={videoStyle}
-          onClick={togglePlay}
-        />
-        
-        {/* Overlay controls */}
-        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <Button
-            variant="secondary"
-            size="lg"
-            className="bg-black/50 hover:bg-black/70"
+        {playbackError ? (
+          <div className="flex items-center justify-center h-full w-full bg-black/80 text-red-400 text-center p-6">
+            <div>
+              <div className="text-lg font-bold mb-2">{playbackError}</div>
+              <div className="text-sm text-slate-400">File: {item.name}</div>
+            </div>
+          </div>
+        ) : (
+          <video
+            ref={videoRef}
+            src={item.url}
+            className="w-full h-full object-contain"
+            style={videoStyle}
             onClick={togglePlay}
-          >
-            {isPlaying ? <Pause className="h-8 w-8" /> : <Play className="h-8 w-8" />}
-          </Button>
-        </div>
+          />
+        )}
+        {!playbackError && (
+          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <Button
+              variant="secondary"
+              size="lg"
+              className="bg-black/50 hover:bg-black/70"
+              onClick={togglePlay}
+            >
+              {isPlaying ? <Pause className="h-8 w-8" /> : <Play className="h-8 w-8" />}
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
