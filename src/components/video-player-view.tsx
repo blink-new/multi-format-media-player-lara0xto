@@ -11,7 +11,6 @@ interface VideoPlayerViewProps {
   volume: number
   onVolumeChange: (volume: number) => void
   onDurationChange: (duration: number) => void
-  audioContext: AudioContext | null;
 }
 
 export default function VideoPlayerView({
@@ -21,7 +20,6 @@ export default function VideoPlayerView({
   volume,
   onVolumeChange,
   onDurationChange,
-  audioContext,
 }: VideoPlayerViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -30,24 +28,16 @@ export default function VideoPlayerView({
   const [isMuted, setIsMuted] = useState(false)
   const [playbackError, setPlaybackError] = useState<string | null>(null)
 
-  const togglePlay = useCallback(async () => {
+  const togglePlay = useCallback(() => {
     if (!videoRef.current) return
-    
-    try {
-      if (isPlaying) {
-        videoRef.current.pause()
-      } else {
-        // Resume audio context if needed
-        if (audioContext && audioContext.state === 'suspended') {
-          await audioContext.resume()
-        }
-        await videoRef.current.play()
-      }
-    } catch (error) {
-      console.error("Playback error:", error)
-      setPlaybackError('Failed to play video. Please try again.')
+    if (isPlaying) {
+      videoRef.current.pause()
+    } else {
+      videoRef.current.play().catch(() => {
+        setPlaybackError('Failed to play video. This format may not be supported by your browser.')
+      })
     }
-  }, [isPlaying, audioContext])
+  }, [isPlaying])
 
   const handleSeek = (value: number[]) => {
     if (videoRef.current) {
@@ -93,20 +83,6 @@ export default function VideoPlayerView({
     const handleLoadedMetadata = () => {
       setDuration(video.duration || 0)
       onDurationChange(video.duration || 0)
-      
-      // Only setup audio processing if explicitly enabled and not causing issues
-      // For now, let's skip it to ensure videos play properly
-      /*
-      if (isAudioProcessingEnabled) {
-        try {
-          setupAudioProcessing(video)
-          console.log("Audio processing enabled for video")
-        } catch (e) {
-          console.error("Audio processing error:", e)
-          setIsAudioProcessingEnabled(false)
-        }
-      }
-      */
     }
 
     const handleTimeUpdate = () => {
@@ -121,8 +97,7 @@ export default function VideoPlayerView({
     const handlePlay = () => setIsPlaying(true)
     const handlePause = () => setIsPlaying(false)
 
-    const handleError = (e: Event) => {
-      console.error("Video error:", e)
+    const handleError = () => {
       const ext = item.name.split('.').pop()?.toLowerCase()
       if (ext === 'mkv') {
         setPlaybackError('MKV format may not be supported in your browser. Try Chrome/Edge or use MP4/WebM.')
@@ -131,19 +106,13 @@ export default function VideoPlayerView({
       }
     }
 
-    const handleCanPlay = () => {
-      console.log("Video can play:", item.name)
-    }
-
     video.addEventListener('loadedmetadata', handleLoadedMetadata)
     video.addEventListener('timeupdate', handleTimeUpdate)
     video.addEventListener('ended', handleEnded)
     video.addEventListener('play', handlePlay)
     video.addEventListener('pause', handlePause)
     video.addEventListener('error', handleError)
-    video.addEventListener('canplay', handleCanPlay)
 
-    // Set initial volume
     video.volume = volume
 
     return () => {
@@ -153,7 +122,6 @@ export default function VideoPlayerView({
       video.removeEventListener('play', handlePlay)
       video.removeEventListener('pause', handlePause)
       video.removeEventListener('error', handleError)
-      video.removeEventListener('canplay', handleCanPlay)
     }
   }, [item.url, onEnded, volume, onDurationChange])
 
@@ -221,10 +189,7 @@ export default function VideoPlayerView({
                 variant="secondary"
                 size="lg"
                 className="bg-black/50 hover:bg-black/70 backdrop-blur-sm"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  togglePlay()
-                }}
+                onClick={togglePlay}
               >
                 {isPlaying ? <Pause className="h-8 w-8" /> : <Play className="h-8 w-8" />}
               </Button>
