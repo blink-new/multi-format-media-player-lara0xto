@@ -45,7 +45,10 @@ export default function MediaPlayerV1() {
     if (!audioContextRef.current) {
       console.log("MediaPlayerV1: Initializing AudioContext and MasterGainNode")
       audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
-      masterGainNodeRef.current = new GainNode(audioContextRef.current)
+    }
+    // Initialize MasterGainNode only after AudioContext is available
+    if (audioContextRef.current && !masterGainNodeRef.current) {
+      masterGainNodeRef.current = audioContextRef.current.createGain()
       masterGainNodeRef.current.connect(audioContextRef.current.destination)
     }
 
