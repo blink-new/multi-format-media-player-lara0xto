@@ -12,6 +12,7 @@ interface VideoPlayerViewProps {
   volume: number
   onVolumeChange: (volume: number) => void
   onDurationChange: (duration: number) => void
+  audioContext: AudioContext | null;
 }
 
 export default function VideoPlayerView({
@@ -22,6 +23,7 @@ export default function VideoPlayerView({
   volume,
   onVolumeChange,
   onDurationChange,
+  audioContext,
 }: VideoPlayerViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -35,10 +37,18 @@ export default function VideoPlayerView({
     if (isPlaying) {
       videoRef.current.pause()
     } else {
-      videoRef.current.play()
+      if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+          videoRef.current?.play()
+        }).catch(error => {
+          console.error("Error resuming audio context:", error);
+        });
+      } else {
+        videoRef.current.play()
+      }
     }
     setIsPlaying(!isPlaying)
-  }, [isPlaying])
+  }, [isPlaying, audioContext])
 
   const handleSeek = (value: number[]) => {
     if (videoRef.current) {

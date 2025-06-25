@@ -11,6 +11,7 @@ interface AudioPlayerViewProps {
   volume: number
   onVolumeChange: (volume: number) => void
   onDurationChange: (duration: number) => void
+  audioContext: AudioContext | null;
 }
 
 export default function AudioPlayerView({
@@ -20,6 +21,7 @@ export default function AudioPlayerView({
   volume,
   onVolumeChange,
   onDurationChange,
+  audioContext,
 }: AudioPlayerViewProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -33,10 +35,18 @@ export default function AudioPlayerView({
     if (isPlaying) {
       audioRef.current.pause()
     } else {
-      audioRef.current.play()
+      if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+          audioRef.current?.play()
+        }).catch(error => {
+          console.error("Error resuming audio context:", error);
+        });
+      } else {
+        audioRef.current.play()
+      }
     }
     setIsPlaying(!isPlaying)
-  }, [isPlaying])
+  }, [isPlaying, audioContext])
 
   const handleSeek = (value: number[]) => {
     if (audioRef.current) {

@@ -45,7 +45,7 @@ export default function MediaPlayerV1() {
     if (!audioContextRef.current) {
       console.log("MediaPlayerV1: Initializing AudioContext and MasterGainNode")
       audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
-      masterGainNodeRef.current = audioContextRef.current.createGain()
+      masterGainNodeRef.current = new GainNode(audioContextRef.current)
       masterGainNodeRef.current.connect(audioContextRef.current.destination)
     }
 
@@ -215,19 +215,6 @@ export default function MediaPlayerV1() {
     }
   }, [currentTrackIndex]);
 
-  const resumeAudioContext = useCallback(() => {
-    const audioCtx = audioContextRef.current;
-    if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume().then(() => {
-        console.log('AudioContext resumed successfully');
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    resumeAudioContext();
-  }, [resumeAudioContext]);
-
   return (
     <div className="w-full max-w-6xl mx-auto flex flex-col lg:flex-row gap-6 p-4">
       <Card className="lg:w-1/3 bg-slate-800/90 border-slate-700 shadow-2xl backdrop-blur-sm">
@@ -277,6 +264,7 @@ export default function MediaPlayerV1() {
                 volume={globalVolume}
                 onVolumeChange={setGlobalVolume}
                 onDurationChange={(duration) => updateTrackDuration(currentPlaylistItem.id, duration)}
+                audioContext={audioContextRef.current}
               />
             )}
             {currentPlaylistItem?.type === "audio" && (
@@ -288,6 +276,7 @@ export default function MediaPlayerV1() {
                 volume={globalVolume}
                 onVolumeChange={setGlobalVolume}
                 onDurationChange={(duration) => updateTrackDuration(currentPlaylistItem.id, duration)}
+                audioContext={audioContextRef.current}
               />
             )}
             {currentPlaylistItem?.type === "midi" && (
