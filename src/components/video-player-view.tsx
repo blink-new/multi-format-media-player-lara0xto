@@ -8,7 +8,6 @@ interface VideoPlayerViewProps {
   item: PlaylistItem
   visualSettings: VisualSettings
   onEnded: () => void
-  setupAudioProcessing: (element: HTMLMediaElement) => void
   volume: number
   onVolumeChange: (volume: number) => void
   onDurationChange: (duration: number) => void
@@ -19,7 +18,6 @@ export default function VideoPlayerView({
   item,
   visualSettings,
   onEnded,
-  setupAudioProcessing,
   volume,
   onVolumeChange,
   onDurationChange,
@@ -32,23 +30,23 @@ export default function VideoPlayerView({
   const [isMuted, setIsMuted] = useState(false)
   const [playbackError, setPlaybackError] = useState<string | null>(null)
 
-  const togglePlay = useCallback(() => {
+  const togglePlay = useCallback(async () => {
     if (!videoRef.current) return
     
-    if (isPlaying) {
-      videoRef.current.pause()
-    } else {
-      if (audioContext && audioContext.state === 'suspended') {
-        audioContext.resume().then(() => {
-          videoRef.current?.play()
-        }).catch(error => {
-          console.error("Error resuming audio context:", error);
-        });
+    try {
+      if (isPlaying) {
+        videoRef.current.pause()
       } else {
-        videoRef.current.play()
+        // Resume audio context if needed
+        if (audioContext && audioContext.state === 'suspended') {
+          await audioContext.resume()
+        }
+        await videoRef.current.play()
       }
+    } catch (error) {
+      console.error("Playback error:", error)
+      setPlaybackError('Failed to play video. Please try again.')
     }
-    setIsPlaying(!isPlaying)
   }, [isPlaying, audioContext])
 
   const handleSeek = (value: number[]) => {
@@ -88,19 +86,27 @@ export default function VideoPlayerView({
   }
 
   useEffect(() => {
-    setPlaybackError(null) // Reset error on new video
+    setPlaybackError(null)
     const video = videoRef.current
     if (!video) return
 
     const handleLoadedMetadata = () => {
       setDuration(video.duration || 0)
       onDurationChange(video.duration || 0)
-      try {
-        setupAudioProcessing(video)
-        console.log("setupAudioProcessing called for video")
-      } catch (e) {
-        console.error("setupAudioProcessing error (video)", e)
+      
+      // Only setup audio processing if explicitly enabled and not causing issues
+      // For now, let's skip it to ensure videos play properly
+      /*
+      if (isAudioProcessingEnabled) {
+        try {
+          setupAudioProcessing(video)
+          console.log("Audio processing enabled for video")
+        } catch (e) {
+          console.error("Audio processing error:", e)
+          setIsAudioProcessingEnabled(false)
+        }
       }
+      */
     }
 
     const handleTimeUpdate = () => {
@@ -115,13 +121,18 @@ export default function VideoPlayerView({
     const handlePlay = () => setIsPlaying(true)
     const handlePause = () => setIsPlaying(false)
 
-    const handleError = () => {
+    const handleError = (e: Event) => {
+      console.error("Video error:", e)
       const ext = item.name.split('.').pop()?.toLowerCase()
       if (ext === 'mkv') {
-        setPlaybackError('Your browser does not support MKV video playback. Try Chrome or Edge, or use MP4/WebM for best compatibility.')
+        setPlaybackError('MKV format may not be supported in your browser. Try Chrome/Edge or use MP4/WebM.')
       } else {
-        setPlaybackError('Video playback failed. This format may not be supported by your browser.')
+        setPlaybackError('Video playback failed. The format may not be supported.')
       }
+    }
+
+    const handleCanPlay = () => {
+      console.log("Video can play:", item.name)
     }
 
     video.addEventListener('loadedmetadata', handleLoadedMetadata)
@@ -130,6 +141,7 @@ export default function VideoPlayerView({
     video.addEventListener('play', handlePlay)
     video.addEventListener('pause', handlePause)
     video.addEventListener('error', handleError)
+    video.addEventListener('canplay', handleCanPlay)
 
     // Set initial volume
     video.volume = volume
@@ -141,17 +153,15 @@ export default function VideoPlayerView({
       video.removeEventListener('play', handlePlay)
       video.removeEventListener('pause', handlePause)
       video.removeEventListener('error', handleError)
+      video.removeEventListener('canplay', handleCanPlay)
     }
-  }, [item.url, onEnded, setupAudioProcessing, volume, onDurationChange])
+  }, [item.url, onEnded, volume, onDurationChange])
 
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.volume = volume;
-      if (isMuted) {
-        videoRef.current.volume = 0;
-      }
+      videoRef.current.volume = isMuted ? 0 : volume
     }
-  }, [volume, isMuted]);
+  }, [volume, isMuted])
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -173,31 +183,52 @@ export default function VideoPlayerView({
     <div className="flex flex-col h-full">
       <div className="flex-1 bg-black rounded-lg overflow-hidden mb-4 relative group">
         {playbackError ? (
-          <div className="flex items-center justify-center h-full w-full bg-black/80 text-red-400 text-center p-6">
+          <div className="flex items-center justify-center h-full w-full bg-slate-900 text-red-400 text-center p-6">
             <div>
-              <div className="text-lg font-bold mb-2">{playbackError}</div>
-              <div className="text-sm text-slate-400">File: {item.name}</div>
+              <div className="text-lg font-semibold mb-2">{playbackError}</div>
+              <div className="text-sm text-slate-400 mb-4">File: {item.name}</div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  setPlaybackError(null)
+                  if (videoRef.current) {
+                    videoRef.current.load()
+                  }
+                }}
+              >
+                Try Again
+              </Button>
             </div>
           </div>
         ) : (
           <video
             ref={videoRef}
             src={item.url}
-            className="w-full h-full object-contain"
+            className="w-full h-full object-contain cursor-pointer"
             style={videoStyle}
             onClick={togglePlay}
+            controls={false}
+            playsInline
+            preload="metadata"
           />
         )}
+        
         {!playbackError && (
-          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-            <Button
-              variant="secondary"
-              size="lg"
-              className="bg-black/50 hover:bg-black/70"
-              onClick={togglePlay}
-            >
-              {isPlaying ? <Pause className="h-8 w-8" /> : <Play className="h-8 w-8" />}
-            </Button>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
+              <Button
+                variant="secondary"
+                size="lg"
+                className="bg-black/50 hover:bg-black/70 backdrop-blur-sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  togglePlay()
+                }}
+              >
+                {isPlaying ? <Pause className="h-8 w-8" /> : <Play className="h-8 w-8" />}
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -205,13 +236,14 @@ export default function VideoPlayerView({
       <div className="space-y-4">
         {/* Progress bar */}
         <div className="flex items-center space-x-3">
-          <span className="text-xs text-slate-400 w-12">{formatTime(currentTime)}</span>
+          <span className="text-xs text-slate-400 w-12 text-right">{formatTime(currentTime)}</span>
           <Slider
             value={[currentTime]}
             max={duration || 100}
-            step={1}
+            step={0.1}
             className="flex-1"
             onValueChange={handleSeek}
+            disabled={playbackError !== null}
           />
           <span className="text-xs text-slate-400 w-12">{formatTime(duration)}</span>
         </div>
@@ -219,13 +251,28 @@ export default function VideoPlayerView({
         {/* Controls */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Button variant="ghost" size="sm" onClick={() => skip(-10)}>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => skip(-10)}
+              disabled={playbackError !== null}
+            >
               <SkipBack className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={togglePlay}>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={togglePlay}
+              disabled={playbackError !== null}
+            >
               {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => skip(10)}>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => skip(10)}
+              disabled={playbackError !== null}
+            >
               <SkipForward className="h-4 w-4" />
             </Button>
           </div>
@@ -238,7 +285,7 @@ export default function VideoPlayerView({
               value={[isMuted ? 0 : volume * 100]}
               max={100}
               step={1}
-              className="w-20"
+              className="w-24"
               onValueChange={handleVolumeChange}
             />
           </div>

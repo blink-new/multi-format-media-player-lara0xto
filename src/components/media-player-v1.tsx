@@ -25,106 +25,65 @@ export default function MediaPlayerV1() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const eqNodesRef = useRef<BiquadFilterNode[]>([])
-  const masterGainNodeRef = useRef<GainNode | null>(null) // For overall volume control after EQ
+  const masterGainNodeRef = useRef<GainNode | null>(null)
 
-  const [globalVolume, setGlobalVolume] = useState(1) // 0 to 1
+  const [globalVolume, setGlobalVolume] = useState(1)
 
   const currentPlaylistItem = currentTrackIndex !== null ? playlist[currentTrackIndex] : null
 
   const cleanupAudioNodes = useCallback(() => {
     if (mediaSourceRef.current) {
-      mediaSourceRef.current.disconnect()
-      mediaSourceRef.current = null // Ensure it's nulled after disconnect
+      try {
+        mediaSourceRef.current.disconnect()
+      } catch (e) {
+        console.warn("Error disconnecting media source:", e)
+      }
+      mediaSourceRef.current = null
     }
-    eqNodesRef.current.forEach((node) => node.disconnect())
+    eqNodesRef.current.forEach((node) => {
+      try {
+        node.disconnect()
+      } catch (e) {
+        console.warn("Error disconnecting EQ node:", e)
+      }
+    })
     eqNodesRef.current = []
   }, [])
 
   useEffect(() => {
-    // Initialize AudioContext and MasterGainNode only once
-    if (!audioContextRef.current) {
-      try {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        console.log("AudioContext initialized");
-      } catch (e) {
-        console.error("Failed to initialize AudioContext", e);
-      }
-    }
-    if (audioContextRef.current && !masterGainNodeRef.current) {
-      try {
-        masterGainNodeRef.current = audioContextRef.current.createGain();
-        masterGainNodeRef.current.connect(audioContextRef.current.destination);
-        console.log("MasterGainNode initialized and connected");
-      } catch (e) {
-        console.error("Failed to initialize MasterGainNode", e);
-      }
-    }
-
-    // Cleanup on unmount
+    // Only initialize audio context when actually needed for audio/effects
     return () => {
-      cleanupAudioNodes();
+      cleanupAudioNodes()
       if (masterGainNodeRef.current) {
         try {
-          masterGainNodeRef.current.disconnect();
+          masterGainNodeRef.current.disconnect()
         } catch (e) {
-          console.warn("Error disconnecting masterGainNode", e);
+          console.warn("Error disconnecting masterGainNode", e)
         }
-        masterGainNodeRef.current = null;
+        masterGainNodeRef.current = null
       }
       if (audioContextRef.current && audioContextRef.current.state !== "closed") {
         audioContextRef.current.close().then(() => {
-          console.log("AudioContext closed");
-          audioContextRef.current = null;
-        });
+          console.log("AudioContext closed")
+          audioContextRef.current = null
+        })
       }
       playlist.forEach((item) => {
         if (item.url.startsWith("blob:")) {
-          URL.revokeObjectURL(item.url);
+          URL.revokeObjectURL(item.url)
         }
-      });
-    };
-  }, [cleanupAudioNodes, playlist]);
-
-  const setupAudioProcessing = useCallback(
-    (mediaElement: HTMLMediaElement) => {
-      if (!audioContextRef.current || !masterGainNodeRef.current) return
-      const audioCtx = audioContextRef.current
-
-      cleanupAudioNodes() // Clean previous connections for the source
-
-      mediaSourceRef.current = audioCtx.createMediaElementSource(mediaElement)
-      let lastNode: AudioNode = mediaSourceRef.current
-
-      eqNodesRef.current = eqBandsDefinition.map((band, i) => {
-        const filter = audioCtx.createBiquadFilter()
-        filter.type = band.type
-        filter.frequency.value = band.f
-        filter.gain.value = eqSettings[i]
-        lastNode.connect(filter)
-        lastNode = filter
-        return filter
       })
-
-      lastNode.connect(masterGainNodeRef.current)
-      // masterGainNodeRef.current is already connected to destination
-      if (masterGainNodeRef.current) {
-        masterGainNodeRef.current.gain.value = globalVolume
-      }
-    },
-    [eqSettings, globalVolume, cleanupAudioNodes],
-  )
-
-  useEffect(() => {
-    eqNodesRef.current.forEach((node, i) => {
-      if (node) node.gain.value = eqSettings[i]
-    })
-  }, [eqSettings])
-
-  useEffect(() => {
-    if (masterGainNodeRef.current) {
-      masterGainNodeRef.current.gain.value = globalVolume
     }
-  }, [globalVolume])
+  }, [cleanupAudioNodes, playlist])
+
+  // Simplified audio processing - only use when explicitly needed
+  const setupAudioProcessing = useCallback(
+    () => {
+      // Skip audio processing for now to ensure videos play properly
+      console.log("Audio processing disabled for stability")
+    },
+    []
+  )
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
@@ -137,43 +96,40 @@ export default function MediaPlayerV1() {
       const fileExtension = file.name.split(".").pop()?.toLowerCase()
       let type: PlaylistItem["type"] = "unknown"
 
-      if (["mp4", "webm", "ogv", "mkv"].includes(fileExtension || "")) type = "video"
-      else if (["mp3", "wav", "ogg", "aac", "flac"].includes(fileExtension || "")) type = "audio"
+      if (["mp4", "webm", "ogv", "mkv", "mov", "avi"].includes(fileExtension || "")) type = "video"
+      else if (["mp3", "wav", "ogg", "aac", "flac", "m4a"].includes(fileExtension || "")) type = "audio"
       else if (["mid", "midi"].includes(fileExtension || "")) type = "midi"
 
       if (type !== "unknown") {
         newPlaylistItems.push({
-          id: `${Date.now()}-${file.name}`,
+          id: `${Date.now()}-${file.name}-${i}`,
           file,
           url: fileUrl,
           type,
           name: file.name,
-          duration: 0, // Will be updated by player components
+          duration: 0,
         })
       } else {
-        URL.revokeObjectURL(fileUrl) // Clean up if unsupported
+        URL.revokeObjectURL(fileUrl)
         console.warn(`Unsupported file type: ${file.name}`)
       }
     }
 
     setPlaylist((prev) => [...prev, ...newPlaylistItems])
     if (currentTrackIndex === null && newPlaylistItems.length > 0) {
-      setCurrentTrackIndex(playlist.length) // Set to the first of newly added items
+      setCurrentTrackIndex(playlist.length)
     }
-    event.target.value = "" // Reset file input
+    event.target.value = ""
   }
 
   const playTrack = (index: number) => {
     if (index >= 0 && index < playlist.length) {
       setCurrentTrackIndex(index)
-      // Reset effects for new track if desired, or keep them
-      // setVisualSettings(initialVisualSettings);
-      // setEqSettings(Array(eqBandsDefinition.length).fill(0));
     }
   }
 
   const playNext = useCallback(() => {
-    if (currentTrackIndex !== null) {
+    if (currentTrackIndex !== null && playlist.length > 0) {
       const nextIndex = (currentTrackIndex + 1) % playlist.length
       playTrack(nextIndex)
     }
@@ -193,7 +149,6 @@ export default function MediaPlayerV1() {
       } else if (currentTrackIndex >= newPlaylist.length) {
         setCurrentTrackIndex(newPlaylist.length - 1)
       }
-      // If currentTrackIndex is still valid, it remains, otherwise it might shift or become null.
     } else if (currentTrackIndex !== null && itemToRemoveIndex < currentTrackIndex) {
       setCurrentTrackIndex(currentTrackIndex - 1)
     }
@@ -244,7 +199,7 @@ export default function MediaPlayerV1() {
           <CardContent className="p-4 h-full flex flex-col">
             {currentPlaylistItem?.type === "video" && (
               <VideoPlayerView
-                key={currentPlaylistItem.id} // Force re-mount on track change
+                key={currentPlaylistItem.id}
                 item={currentPlaylistItem}
                 visualSettings={visualSettings}
                 onEnded={playNext}
@@ -291,11 +246,11 @@ export default function MediaPlayerV1() {
           </CardContent>
         </Card>
 
-        {currentPlaylistItem && (currentPlaylistItem.type === "video" || currentPlaylistItem.type === "audio") && (
+        {currentPlaylistItem && currentPlaylistItem.type === "video" && (
           <Card className="bg-slate-800/90 border-slate-700 shadow-2xl backdrop-blur-sm">
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center text-slate-100 text-lg">
-                <Settings2 className="mr-2 h-5 w-5" /> Effects Panel
+                <Settings2 className="mr-2 h-5 w-5" /> Visual Effects
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -304,10 +259,8 @@ export default function MediaPlayerV1() {
                 onVisualSettingsChange={setVisualSettings}
                 eqSettings={eqSettings}
                 onEqSettingsChange={setEqSettings}
-                disabled={
-                  !currentPlaylistItem || (currentPlaylistItem.type !== "video" && currentPlaylistItem.type !== "audio")
-                }
-                videoMode={currentPlaylistItem?.type === "video"}
+                disabled={false}
+                videoMode={true}
               />
             </CardContent>
           </Card>
